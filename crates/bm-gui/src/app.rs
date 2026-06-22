@@ -369,6 +369,7 @@ impl BorderlessApp {
     fn start_background(&mut self) {
         self.error_message = None;
         let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+        let _guard = rt.enter();
         let tx = self.event_tx.clone();
 
         match self.mode {
