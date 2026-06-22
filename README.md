@@ -14,13 +14,13 @@ No proprietary hardware, no subscription, no cloud dependency. A pure Rust, cros
 
 | Platform | Download |
 |----------|----------|
-| All platforms | [borderless-mouse-v1.0.1.tar.gz](https://github.com/workwithchris/borderless-mouse/archive/refs/tags/v1.0.1.tar.gz) |
+| All platforms | [borderless-mouse-v1.0.2.tar.gz](https://github.com/workwithchris/borderless-mouse/archive/refs/tags/v1.0.2.tar.gz) |
 
 ### Install
 
 ```bash
-curl -L https://github.com/workwithchris/borderless-mouse/archive/refs/tags/v1.0.1.tar.gz | tar xz
-cd borderless-mouse-1.0.1
+curl -L https://github.com/workwithchris/borderless-mouse/archive/refs/tags/v1.0.2.tar.gz | tar xz
+cd borderless-mouse-1.0.2
 cargo build --release
 ```
 
