@@ -6,7 +6,7 @@ borderless-mouse lets you control a secondary Mac from your primary Linux machin
 
 No proprietary hardware, no subscription, no cloud dependency. A pure Rust, cross-platform daemon and desktop app.
 
-[![GitHub release](https://img.shields.io/github/v/release/anomalyco/borderless-mouse?style=flat-square)](https://github.com/anomalyco/borderless-mouse/releases/latest)
+[![GitHub release](https://img.shields.io/github/v/release/workwithchris/borderless-mouse?style=flat-square)](https://github.com/workwithchris/borderless-mouse/releases/latest)
 [![Linux](https://img.shields.io/badge/platform-Linux-blue?style=flat-square)]()
 [![macOS](https://img.shields.io/badge/platform-macOS-lightgrey?style=flat-square)]()
 
@@ -14,9 +14,9 @@ No proprietary hardware, no subscription, no cloud dependency. A pure Rust, cros
 
 | Platform | Download |
 |----------|----------|
-| 🐧 Linux (x86_64) | [borderless-mouse-linux-x86_64.tar.gz](https://github.com/anomalyco/borderless-mouse/releases/latest/download/borderless-mouse-linux-x86_64.tar.gz) |
-| 🍎 macOS (Apple Silicon) | [borderless-mouse-macos-arm64.tar.gz](https://github.com/anomalyco/borderless-mouse/releases/latest/download/borderless-mouse-macos-arm64.tar.gz) |
-| 🍎 macOS (Intel) | [borderless-mouse-macos-x86_64.tar.gz](https://github.com/anomalyco/borderless-mouse/releases/latest/download/borderless-mouse-macos-x86_64.tar.gz) |
+| 🐧 Linux (x86_64) | [borderless-mouse-linux-x86_64.tar.gz](https://github.com/workwithchris/borderless-mouse/releases/latest/download/borderless-mouse-linux-x86_64.tar.gz) |
+| 🍎 macOS (Apple Silicon) | [borderless-mouse-macos-arm64.tar.gz](https://github.com/workwithchris/borderless-mouse/releases/latest/download/borderless-mouse-macos-arm64.tar.gz) |
+| 🍎 macOS (Intel) | [borderless-mouse-macos-x86_64.tar.gz](https://github.com/workwithchris/borderless-mouse/releases/latest/download/borderless-mouse-macos-x86_64.tar.gz) |
 
 ### Install
 
