@@ -1,7 +1,7 @@
 [package]
 name = "bm-core"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"
 
 [dependencies]
 tokio = { version = "1", features = ["net", "io-util", "sync", "time", "rt", "macros"] }
