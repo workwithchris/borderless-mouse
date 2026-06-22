@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use bm_core::network::{apply_config_via_gui, detect_interfaces, generate_commands, NetworkConfig};
 use eframe::egui;
 
 use crate::log_capture::{LogCollector, LogEntry};
@@ -24,6 +25,13 @@ pub struct BorderlessApp {
     port: String,
     connect_addr: String,
     secret: String,
+
+    // Network setup
+    net_ip: String,
+    net_mask: String,
+    net_detected_ifaces: String,
+    net_last_commands: String,
+    net_apply_result: String,
 
     // State
     status: String,
@@ -54,6 +62,11 @@ impl Default for BorderlessApp {
             port: "24800".into(),
             connect_addr: "192.168.1.100".into(),
             secret: String::new(),
+            net_ip: "192.168.2.1".into(),
+            net_mask: "255.255.255.0".into(),
+            net_detected_ifaces: String::new(),
+            net_last_commands: String::new(),
+            net_apply_result: String::new(),
             status: "stopped".into(),
             is_running: false,
             show_password: false,
@@ -266,6 +279,107 @@ impl eframe::App for BorderlessApp {
                                     ui.end_row();
                                 });
                         }
+                    }
+                });
+
+            // Network setup section
+            ui.separator();
+            egui::CollapsingHeader::new("Network Setup (Direct Link)")
+                .default_open(false)
+                .show(ui, |ui| {
+                    egui::Grid::new("network_grid")
+                        .num_columns(2)
+                        .spacing([8.0, 4.0])
+                        .show(ui, |ui| {
+                            ui.label("IP Address:");
+                            ui.text_edit_singleline(&mut self.net_ip);
+                            ui.end_row();
+
+                            ui.label("Subnet Mask:");
+                            ui.text_edit_singleline(&mut self.net_mask);
+                            ui.end_row();
+                        });
+
+                    ui.horizontal(|ui| {
+                        if ui.button("🔍 Detect Interfaces").clicked() {
+                            let ifaces = detect_interfaces();
+                            self.net_detected_ifaces = if ifaces.is_empty() {
+                                "none found".into()
+                            } else {
+                                ifaces.join(", ")
+                            };
+                        }
+                        ui.label(&self.net_detected_ifaces);
+                    });
+
+                    if ui.button("📋 Show Commands").clicked() {
+                        let config = NetworkConfig {
+                            ip_address: Some(self.net_ip.clone()),
+                            subnet_mask: Some(self.net_mask.clone()),
+                        };
+                        let cmds = generate_commands(&config);
+                        self.net_last_commands = if cmds.is_empty() {
+                            "no commands — check IP".into()
+                        } else {
+                            cmds.join("\n")
+                        };
+                    }
+                    if !self.net_last_commands.is_empty() {
+                        let mut frame = egui::Frame::group(ui.style());
+                        frame = frame.inner_margin(egui::Margin::same(4));
+                        frame.show(ui, |ui| {
+                            ui.label(
+                                egui::RichText::new(&self.net_last_commands)
+                                    .monospace()
+                                    .size(12.0),
+                            );
+                        });
+                    }
+
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                egui::RichText::new("⚡ Apply Now").color(egui::Color32::WHITE),
+                            )
+                            .fill(egui::Color32::DARK_BLUE)
+                            .min_size(egui::vec2(ui.available_width(), 28.0)),
+                        )
+                        .clicked()
+                    {
+                        let config = NetworkConfig {
+                            ip_address: Some(self.net_ip.clone()),
+                            subnet_mask: Some(self.net_mask.clone()),
+                        };
+                        match apply_config_via_gui(&config) {
+                            Ok(msg) => {
+                                self.net_apply_result = msg;
+                                self.pending_logs.push(LogEntry {
+                                    timestamp: crate::log_capture::chrono_now(),
+                                    level: " INFO".into(),
+                                    message: "network config applied successfully".into(),
+                                });
+                            }
+                            Err(e) => {
+                                self.net_apply_result = e.clone();
+                                self.pending_logs.push(LogEntry {
+                                    timestamp: crate::log_capture::chrono_now(),
+                                    level: "ERROR".into(),
+                                    message: format!("network apply failed: {e}"),
+                                });
+                            }
+                        }
+                    }
+                    if !self.net_apply_result.is_empty() {
+                        ui.label(
+                            egui::RichText::new(&self.net_apply_result)
+                                .color(if self.net_apply_result.contains("failed")
+                                    || self.net_apply_result.contains("not found")
+                                {
+                                    egui::Color32::LIGHT_RED
+                                } else {
+                                    egui::Color32::LIGHT_GREEN
+                                }),
+                        );
                     }
                 });
 

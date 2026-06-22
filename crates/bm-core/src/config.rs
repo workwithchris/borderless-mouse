@@ -1,3 +1,4 @@
+use crate::network::NetworkConfig;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
@@ -28,6 +29,7 @@ pub struct ClientConfig {
 pub struct AppConfig {
     pub server: Option<ServerConfig>,
     pub client: Option<ClientConfig>,
+    pub network: Option<NetworkConfig>,
 }
 
 impl Default for AppConfig {
@@ -44,6 +46,7 @@ impl Default for AppConfig {
                 port: crate::protocol::DEFAULT_PORT,
                 secret: None,
             }),
+            network: Some(NetworkConfig::default()),
         }
     }
 }
@@ -129,6 +132,7 @@ mod tests {
                 port: 24800,
                 secret: None,
             }),
+            network: None,
         };
         save_config(&path, &config).unwrap();
         let loaded = load_config(&path).unwrap();
@@ -172,6 +176,7 @@ mod tests {
         let config = AppConfig {
             server: None,
             client: None,
+            network: None,
         };
         let path = unique_path();
         save_config(&path, &config).unwrap();
@@ -204,6 +209,7 @@ mod tests {
                 ],
             }),
             client: None,
+            network: None,
         };
         let path = unique_path();
         save_config(&path, &config).unwrap();

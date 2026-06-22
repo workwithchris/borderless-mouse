@@ -17,7 +17,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Open the desktop GUI
-    #[command(alias = "ui")]
+    #[command(visible_alias = "ui")]
     Gui,
     /// Run as KVM server (machine with physical keyboard/mouse)
     Server {
