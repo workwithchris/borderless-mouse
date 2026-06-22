@@ -1,0 +1,20 @@
+[package]
+name = "bm-input-linux"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bm-core = { path = "../bm-core" }
+tokio = { version = "1", features = ["sync"] }
+anyhow = "1"
+tracing = "0.1"
+
+# Wayland capture via reis + portal (pure Rust, no system libs needed)
+reis = { version = "0.7", optional = true, default-features = false, features = ["tokio"] }
+ashpd = { version = "0.13", optional = true, features = ["tokio", "remote_desktop", "screencast"] }
+futures-util = { version = "0.3", optional = true }
+libc = "0.2"
+
+[features]
+default = ["wayland"]
+wayland = ["reis", "ashpd", "futures-util"]

@@ -1,0 +1,17 @@
+[package]
+name = "bm-input-macos"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bm-core = { path = "../bm-core" }
+tokio = { version = "1", features = ["rt", "macros"] }
+anyhow = "1"
+tracing = "0.1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cgevents = { version = "0.10", optional = true }
+
+[features]
+default = []
+cg = ["cgevents"]

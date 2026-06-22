@@ -1,0 +1,18 @@
+[package]
+name = "bm-clipboard"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bm-core = { path = "../bm-core" }
+arboard = { version = "3", optional = true }
+tokio = { version = "1", features = ["sync"] }
+anyhow = "1"
+tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros"] }
+
+[features]
+default = []
+sync = ["arboard"]

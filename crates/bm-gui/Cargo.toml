@@ -1,0 +1,20 @@
+[package]
+name = "bm-gui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bm-core = { path = "../bm-core" }
+bm-input-linux = { path = "../bm-input-linux" }
+bm-input-macos = { path = "../bm-input-macos" }
+bm-clipboard = { path = "../bm-clipboard" }
+
+eframe = "0.31"
+egui = "0.31"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry"] }
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "6"
