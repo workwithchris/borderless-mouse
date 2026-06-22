@@ -165,18 +165,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn channel_capacity() {
-        let sync = new_sync();
+    async fn channel_try_send_until_full() {
+        let mut sync = new_sync();
         let sender = sync.sender();
 
-        // Send more than channel capacity (64) to verify blocking
-        for i in 0..70usize {
-            sender
-                .send(ClipboardChange::Remote(format!("msg-{i}")))
-                .await
-                .unwrap_or_else(|_| panic!("channel should accept msg {i}"));
+        // Channel capacity is 64; try_send should succeed until buffer is full
+        let mut sent = 0usize;
+        while sender.try_send(ClipboardChange::Remote(format!("msg-{sent}"))).is_ok() {
+            sent += 1;
         }
-        // The channel capacity is 64 but mpsc channels accept additional messages
-        // until the buffer is full; try_send would fail but send awaits
+        // Should have filled the buffer (64 items)
+        assert!(sent >= 64, "should send at least 64 items, got {sent}");
+
+        // Poll once — processes first item in FIFO order
+        sync.poll().await;
+        assert!(sync.last_content.as_deref() == Some("msg-0"));
     }
 }

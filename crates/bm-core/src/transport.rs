@@ -65,66 +65,58 @@ mod tests {
     use crate::protocol::{Event, MouseButton};
     use tokio::net::TcpListener as TokioListener;
 
-    fn runtime() -> tokio::runtime::Runtime {
+    fn new_rt() -> tokio::runtime::Runtime {
         tokio::runtime::Builder::new_current_thread()
             .enable_io()
             .build()
             .unwrap()
     }
 
-    fn connect_pair() -> (Connection, Connection) {
-        runtime().block_on(async {
-            let listener = TokioListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = listener.local_addr().unwrap();
-            let (server_stream, _) = tokio::join!(
-                async { listener.accept().await.unwrap().0 },
-                TcpStream::connect(addr),
-            );
-            let server = Connection::from_stream(server_stream).unwrap();
-            let client = Connection::connect(&addr.to_string()).await.unwrap();
-            (server, client)
-        })
+    fn run<F>(f: F)
+    where
+        F: std::future::Future<Output = ()>,
+    {
+        new_rt().block_on(f)
+    }
+
+    /// Create a connected server+client pair within the current runtime.
+    async fn pair() -> (Connection, Connection) {
+        let listener = TokioListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let (server_stream, client_result) = tokio::join!(
+            async { listener.accept().await.unwrap().0 },
+            TcpStream::connect(addr),
+        );
+        let server = Connection::from_stream(server_stream).unwrap();
+        let client = Connection::from_stream(client_result.unwrap()).unwrap();
+        (server, client)
     }
 
     #[test]
-    fn connect_and_handshake() {
-        let rt = runtime();
-        rt.block_on(async {
-            let listener = TokioListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = listener.local_addr().unwrap();
-
-            let server_fut = async {
-                let (stream, _) = listener.accept().await.unwrap();
-                let mut conn = Connection::from_stream(stream).unwrap();
-                let event = conn.read().await.unwrap().unwrap();
-                match event {
-                    Event::Ping(id) => {
-                        conn.write(&Event::Pong(id)).await.unwrap();
+    fn ping_pong() {
+        run(async {
+            let (mut server, mut client) = pair().await;
+            tokio::join!(
+                async {
+                    let event = server.read().await.unwrap().unwrap();
+                    match event {
+                        Event::Ping(id) => server.write(&Event::Pong(id)).await.unwrap(),
+                        _ => panic!("expected Ping"),
                     }
-                    _ => panic!("expected Ping"),
-                }
-                conn.shutdown().await.unwrap();
-            };
-
-            let client_fut = async {
-                let mut conn = Connection::connect(&addr.to_string()).await.unwrap();
-                conn.write(&Event::Ping(42)).await.unwrap();
-                let response = conn.read().await.unwrap().unwrap();
-                match response {
-                    Event::Pong(id) => assert_eq!(id, 42),
-                    _ => panic!("expected Pong"),
-                }
-            };
-
-            tokio::join!(server_fut, client_fut);
+                },
+                async {
+                    client.write(&Event::Ping(42)).await.unwrap();
+                    let resp = client.read().await.unwrap().unwrap();
+                    assert!(matches!(resp, Event::Pong(42)));
+                },
+            );
         });
     }
 
     #[test]
-    fn write_then_read_event() {
-        let (mut server, mut client) = connect_pair();
-        let rt = runtime();
-        rt.block_on(async {
+    fn write_then_read() {
+        run(async {
+            let (mut server, mut client) = pair().await;
             let events = vec![
                 Event::Hello {
                     version: 1,
@@ -132,29 +124,16 @@ mod tests {
                     display_size: (1920, 1080),
                 },
                 Event::MouseMove { x: 500.0, y: 300.0 },
-                Event::MouseButton {
-                    button: MouseButton::Left,
-                    pressed: true,
-                },
+                Event::MouseButton { button: MouseButton::Left, pressed: true },
                 Event::MouseScroll { dx: 0.0, dy: -5.0 },
-                Event::KeyEvent {
-                    keycode: 42,
-                    pressed: true,
-                    modifiers: 2,
-                },
-                Event::ClipboardChanged {
-                    content: "test data".into(),
-                },
-                Event::Disconnect {
-                    reason: "done".into(),
-                },
+                Event::KeyEvent { keycode: 42, pressed: true, modifiers: 2 },
+                Event::ClipboardChanged { content: "test data".into() },
+                Event::Disconnect { reason: "done".into() },
             ];
 
-            // Write all events from client, read on server
             for event in &events {
                 client.write(event).await.unwrap();
             }
-
             for expected in &events {
                 let received = server.read().await.unwrap().unwrap();
                 assert_eq!(
@@ -166,106 +145,53 @@ mod tests {
     }
 
     #[test]
-    fn empty_stream_returns_none() {
-        let (_, mut client) = connect_pair();
-        let rt = runtime();
-        rt.block_on(async {
-            client.shutdown().await.unwrap();
-            // After shutdown, read should return None
-            // Actually after shutdown, the connection may not be readable immediately
-            // So we just verify no panic
-        });
-    }
-
-    #[test]
-    fn oversized_message_rejected() {
-        let rt = runtime();
-        rt.block_on(async {
-            let listener = TokioListener::bind("127.0.0.1:0").await.unwrap();
-            let _addr = listener.local_addr().unwrap();
-
-            let (stream, _) = listener.accept().await.unwrap();
-            let (_reader, _writer) = stream.into_split();
-            // Verify MAX_MESSAGE_SIZE constant is reasonable
-            assert_eq!(MAX_MESSAGE_SIZE, 16 * 1024 * 1024);
-        });
-    }
-
-    #[test]
-    fn write_to_closed_connection() {
-        let (_, mut client) = connect_pair();
-        let rt = runtime();
-        rt.block_on(async {
-            // This should not panic, just return an error
-            // But we won't actually test the error since we can't guarantee
-            // the timing of the close
-            let result = client
-                .write(&Event::Ping(1))
-                .await;
-            // May succeed or fail depending on timing
-            let _ = result;
-        });
-    }
-
-    #[test]
-    fn multiple_events_in_sequence() {
-        let rt = runtime();
-        rt.block_on(async {
-            let listener = TokioListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = listener.local_addr().unwrap();
-
-            let server_fut = async {
-                let (stream, _) = listener.accept().await.unwrap();
-                let mut conn = Connection::from_stream(stream).unwrap();
-                for i in 0..100u64 {
-                    let event = conn.read().await.unwrap().unwrap();
-                    match event {
-                        Event::Ping(n) => assert_eq!(n, i),
-                        _ => panic!("expected Ping({i})"),
+    fn batch_100() {
+        run(async {
+            let (mut server, mut client) = pair().await;
+            let n = 100u64;
+            tokio::join!(
+                async {
+                    for i in 0..n {
+                        let event = server.read().await.unwrap().unwrap();
+                        assert!(matches!(event, Event::Ping(id) if id == i));
                     }
-                }
-            };
-
-            let client_fut = async {
-                let mut conn = Connection::connect(&addr.to_string()).await.unwrap();
-                for i in 0..100u64 {
-                    conn.write(&Event::Ping(i)).await.unwrap();
-                }
-            };
-
-            tokio::join!(server_fut, client_fut);
+                },
+                async {
+                    for i in 0..n {
+                        client.write(&Event::Ping(i)).await.unwrap();
+                    }
+                },
+            );
         });
     }
 
     #[test]
-    fn interleaved_read_write() {
-        let rt = runtime();
-        rt.block_on(async {
-            let listener = TokioListener::bind("127.0.0.1:0").await.unwrap();
-            let addr = listener.local_addr().unwrap();
-
-            let server_fut = async {
-                let (stream, _) = listener.accept().await.unwrap();
-                let mut conn = Connection::from_stream(stream).unwrap();
-                let event = conn.read().await.unwrap().unwrap();
-                assert!(matches!(event, Event::Ping(1)));
-                conn.write(&Event::Pong(1)).await.unwrap();
-                let event = conn.read().await.unwrap().unwrap();
-                assert!(matches!(event, Event::Ping(2)));
-                conn.write(&Event::Pong(2)).await.unwrap();
-            };
-
-            let client_fut = async {
-                let mut conn = Connection::connect(&addr.to_string()).await.unwrap();
-                conn.write(&Event::Ping(1)).await.unwrap();
-                let resp = conn.read().await.unwrap().unwrap();
-                assert!(matches!(resp, Event::Pong(1)));
-                conn.write(&Event::Ping(2)).await.unwrap();
-                let resp = conn.read().await.unwrap().unwrap();
-                assert!(matches!(resp, Event::Pong(2)));
-            };
-
-            tokio::join!(server_fut, client_fut);
+    fn interleaved() {
+        run(async {
+            let (mut server, mut client) = pair().await;
+            tokio::join!(
+                async {
+                    let event = server.read().await.unwrap().unwrap();
+                    assert!(matches!(event, Event::Ping(1)));
+                    server.write(&Event::Pong(1)).await.unwrap();
+                    server.write(&Event::Ping(2)).await.unwrap();
+                    let event = server.read().await.unwrap().unwrap();
+                    assert!(matches!(event, Event::Pong(2)));
+                },
+                async {
+                    client.write(&Event::Ping(1)).await.unwrap();
+                    let event = client.read().await.unwrap().unwrap();
+                    assert!(matches!(event, Event::Pong(1)));
+                    let event = client.read().await.unwrap().unwrap();
+                    assert!(matches!(event, Event::Ping(2)));
+                    client.write(&Event::Pong(2)).await.unwrap();
+                },
+            );
         });
+    }
+
+    #[test]
+    fn oversized_message_constant() {
+        assert_eq!(MAX_MESSAGE_SIZE, 16 * 1024 * 1024);
     }
 }

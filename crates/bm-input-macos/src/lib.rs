@@ -36,7 +36,7 @@ mod tests {
 
     #[tokio::test]
     async fn create_emulation() {
-        let emu = InputEmulation::new().await.unwrap();
+        let mut emu = InputEmulation::new().await.unwrap();
         assert_eq!(emu.mouse_move(0.0, 0.0).await.unwrap(), ());
         assert_eq!(emu.mouse_button(0, true).await.unwrap(), ());
         assert_eq!(emu.mouse_scroll(0.0, 0.0).await.unwrap(), ());

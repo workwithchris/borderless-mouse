@@ -41,5 +41,5 @@
 ## State
 
 - **Screen edge detection** (`InputEvent::EdgeReached` / `EdgeLeft`) is defined in the protocol but not yet wired in the wayland capture loop. `find_target()` in main.rs reads `ScreenEdge` config to decide forwarding targets.
-- **No tests exist anywhere** in the repo.
+- **Tests exist** in `bm-core` (37 tests: 30 unit + 7 integration), `bm-clipboard` (7), `bm-input-macos` (4). Run `cargo test --workspace` to run all 48 tests. Transport tests use real loopback TCP via `tokio::join!` within a single `block_on` — the `pair()` helper creates a connected server+client on `127.0.0.1:0`. No tests for `bm-input-linux` (requires Wayland compositor) or `bm-gui` (requires display server).
 - Config stored via `directories` at `~/.config/borderless-mouse/config.toml`.
