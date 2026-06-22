@@ -14,22 +14,14 @@ No proprietary hardware, no subscription, no cloud dependency. A pure Rust, cros
 
 | Platform | Download |
 |----------|----------|
-| 🐧 Linux (x86_64) | [borderless-mouse-linux-x86_64.tar.gz](https://github.com/workwithchris/borderless-mouse/releases/latest/download/borderless-mouse-linux-x86_64.tar.gz) |
-| 🍎 macOS (Apple Silicon) | [borderless-mouse-macos-arm64.tar.gz](https://github.com/workwithchris/borderless-mouse/releases/latest/download/borderless-mouse-macos-arm64.tar.gz) |
-| 🍎 macOS (Intel) | [borderless-mouse-macos-x86_64.tar.gz](https://github.com/workwithchris/borderless-mouse/releases/latest/download/borderless-mouse-macos-x86_64.tar.gz) |
+| All platforms | [borderless-mouse-v1.0.1.tar.gz](https://github.com/workwithchris/borderless-mouse/archive/refs/tags/v1.0.1.tar.gz) |
 
 ### Install
 
 ```bash
-# Linux (server)
-tar xzf borderless-mouse-linux-x86_64.tar.gz
-sudo cp borderless-mouse /usr/local/bin/
-borderless-mouse server --bind 0.0.0.0
-
-# macOS (client)
-tar xzf borderless-mouse-macos-arm64.tar.gz  # or -macos-x86_64
-sudo cp borderless-mouse /usr/local/bin/
-borderless-mouse client --connect 192.168.1.100
+curl -L https://github.com/workwithchris/borderless-mouse/archive/refs/tags/v1.0.1.tar.gz | tar xz
+cd borderless-mouse-1.0.1
+cargo build --release
 ```
 
 > **Note:** macOS binary requires Accessibility permissions (granted on first launch). See [macOS setup](#macos-setup).
