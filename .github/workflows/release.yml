@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-linux:
+    name: Linux (x86_64)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libwayland-dev
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/borderless-mouse dist/
+          cp README.md LICENSE dist/ 2>/dev/null || true
+          cd dist
+          tar czf ../borderless-mouse-linux-x86_64.tar.gz \
+            borderless-mouse README.md LICENSE 2>/dev/null || \
+          tar czf ../borderless-mouse-linux-x86_64.tar.gz borderless-mouse
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: borderless-mouse-linux-x86_64
+          path: borderless-mouse-linux-x86_64.tar.gz
+
+  build-macos-x86_64:
+    name: macOS (x86_64, Intel)
+    runs-on: macos-13
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release --features "bm-input-macos/cg,bm-clipboard/sync"
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/borderless-mouse dist/
+          cp README.md LICENSE dist/ 2>/dev/null || true
+          cd dist
+          tar czf ../borderless-mouse-macos-x86_64.tar.gz \
+            borderless-mouse README.md LICENSE 2>/dev/null || \
+          tar czf ../borderless-mouse-macos-x86_64.tar.gz borderless-mouse
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: borderless-mouse-macos-x86_64
+          path: borderless-mouse-macos-x86_64.tar.gz
+
+  build-macos-arm64:
+    name: macOS (ARM64, Apple Silicon)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: cargo build --release --features "bm-input-macos/cg,bm-clipboard/sync"
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          cp target/release/borderless-mouse dist/
+          cp README.md LICENSE dist/ 2>/dev/null || true
+          cd dist
+          tar czf ../borderless-mouse-macos-arm64.tar.gz \
+            borderless-mouse README.md LICENSE 2>/dev/null || \
+          tar czf ../borderless-mouse-macos-arm64.tar.gz borderless-mouse
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: borderless-mouse-macos-arm64
+          path: borderless-mouse-macos-arm64.tar.gz
+
+  create-release:
+    name: Create GitHub Release
+    needs:
+      - build-linux
+      - build-macos-x86_64
+      - build-macos-arm64
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate checksums
+        run: |
+          cd artifacts
+          for f in */borderless-mouse-*.tar.gz; do
+            sha256sum "$f" >> checksums.txt
+          done
+          cat checksums.txt
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: borderless-mouse ${{ github.ref_name }}
+          body_path: CHANGELOG.md
+          fail_on_unmatched_assertions: true
+          files: |
+            artifacts/borderless-mouse-linux-x86_64/borderless-mouse-linux-x86_64.tar.gz
+            artifacts/borderless-mouse-macos-x86_64/borderless-mouse-macos-x86_64.tar.gz
+            artifacts/borderless-mouse-macos-arm64/borderless-mouse-macos-arm64.tar.gz
+            artifacts/checksums.txt

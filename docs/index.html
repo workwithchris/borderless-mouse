@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>borderless-mouse</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0d1117;
+      color: #c9d1d9;
+      line-height: 1.6;
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+    h1 { font-size: 2.5rem; margin-bottom: 0.25rem; }
+    h1 span { color: #58a6ff; }
+    .subtitle { color: #8b949e; font-size: 1.1rem; margin-bottom: 2rem; }
+    h2 { font-size: 1.3rem; margin: 1.5rem 0 0.75rem; color: #f0f6fc; }
+    .downloads { display: flex; flex-direction: column; gap: 0.75rem; }
+    .download {
+      display: flex; align-items: center; justify-content: space-between;
+      background: #161b22; border: 1px solid #30363d; border-radius: 8px;
+      padding: 1rem 1.25rem; text-decoration: none; color: #c9d1d9;
+      transition: border-color 0.2s;
+    }
+    .download:hover { border-color: #58a6ff; }
+    .dl-platform { font-weight: 600; }
+    .dl-meta { color: #8b949e; font-size: 0.85rem; }
+    .dl-badge {
+      background: #238636; color: #fff; padding: 0.2rem 0.6rem;
+      border-radius: 4px; font-size: 0.75rem; font-weight: 600;
+    }
+    .footer { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid #21262d; font-size: 0.85rem; color: #8b949e; }
+    a { color: #58a6ff; }
+    .cmd {
+      background: #161b22; padding: 0.75rem 1rem; border-radius: 6px;
+      font-family: "SF Mono", Consolas, monospace; font-size: 0.9rem;
+      margin: 0.5rem 0; overflow-x: auto;
+    }
+    .features { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin: 1rem 0; }
+    .features li { list-style: none; padding: 0.25rem 0; }
+    .features li::before { content: "✓ "; color: #3fb950; }
+  </style>
+</head>
+<body>
+  <h1>🖱 <span>borderless-mouse</span></h1>
+  <p class="subtitle">Software KVM — share one mouse & keyboard across your computers</p>
+
+  <h2>Download</h2>
+  <div class="downloads" id="downloads">
+    <a class="download" href="https://github.com/anomalyco/borderless-mouse/releases/latest/download/borderless-mouse-linux-x86_64.tar.gz">
+      <div>
+        <div class="dl-platform">🐧 Linux (x86_64)</div>
+        <div class="dl-meta">Ubuntu 22.04+, Fedora 38+, Debian 12+</div>
+      </div>
+      <span class="dl-badge">Download</span>
+    </a>
+    <a class="download" href="https://github.com/anomalyco/borderless-mouse/releases/latest/download/borderless-mouse-macos-arm64.tar.gz">
+      <div>
+        <div class="dl-platform">🍎 macOS (Apple Silicon)</div>
+        <div class="dl-meta">macOS 12.0+, M1/M2/M3/M4</div>
+      </div>
+      <span class="dl-badge">Download</span>
+    </a>
+    <a class="download" href="https://github.com/anomalyco/borderless-mouse/releases/latest/download/borderless-mouse-macos-x86_64.tar.gz">
+      <div>
+        <div class="dl-platform">🍎 macOS (Intel)</div>
+        <div class="dl-meta">macOS 12.0+, Intel Mac</div>
+      </div>
+      <span class="dl-badge">Download</span>
+    </a>
+  </div>
+
+  <h2>Quick start</h2>
+  <div class="cmd">tar xzf borderless-mouse-linux-x86_64.tar.gz</div>
+  <div class="cmd">sudo cp borderless-mouse /usr/local/bin/</div>
+  <p>On the server (Linux):</p>
+  <div class="cmd">borderless-mouse server --bind 0.0.0.0</div>
+  <p>On the client (Mac):</p>
+  <div class="cmd">borderless-mouse client --connect &lt;linux-ip&gt;</div>
+
+  <h2>Features</h2>
+  <ul class="features">
+    <li>Seamless mouse movement across screens</li>
+    <li>Keyboard &amp; click forwarding</li>
+    <li>Bi-directional clipboard sync</li>
+    <li>Desktop GUI for easy control</li>
+    <li>Headless CLI mode</li>
+    <li>Direct Ethernet link setup</li>
+    <li>No cloud, no subscription</li>
+    <li>Pure Rust — no runtime deps</li>
+  </ul>
+
+  <div class="footer">
+    <a href="https://github.com/anomalyco/borderless-mouse">GitHub</a> ·
+    MIT License
+  </div>
+</body>
+</html>
