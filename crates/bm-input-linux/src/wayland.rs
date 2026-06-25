@@ -8,14 +8,18 @@ use reis::ei::Context;
 use reis::event::{DeviceCapability, EiEvent};
 use tokio::sync::mpsc;
 
-use bm_core::input::{InputEvent, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_SUPER};
+use bm_core::input::{Direction, InputEvent, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_SUPER};
 
 pub struct WaylandCapture {
     pub handle: tokio::task::JoinHandle<anyhow::Result<()>>,
 }
 
 impl WaylandCapture {
-    pub async fn spawn(tx: mpsc::Sender<InputEvent>) -> anyhow::Result<Self> {
+    pub async fn spawn(
+        tx: mpsc::Sender<InputEvent>,
+        screen_width: f64,
+        screen_height: f64,
+    ) -> anyhow::Result<Self> {
         let proxy = RemoteDesktop::new().await?;
         let session = proxy.create_session(Default::default()).await?;
 
@@ -47,7 +51,7 @@ impl WaylandCapture {
         // Spawn a dedicated OS thread for the capture loop.
         // The reis context types are not Send, so they must stay on one thread.
         let handle = tokio::task::spawn_blocking(move || {
-            run_capture_loop_blocking(context, tx)
+            run_capture_loop_blocking(context, tx, screen_width, screen_height)
         });
 
         Ok(Self { handle })
@@ -57,6 +61,8 @@ impl WaylandCapture {
 fn run_capture_loop_blocking(
     context: Context,
     tx: mpsc::Sender<InputEvent>,
+    screen_width: f64,
+    screen_height: f64,
 ) -> anyhow::Result<()> {
     let (_connection, mut iter) = context
         .handshake_blocking("borderless-mouse", ContextType::Receiver)?;
@@ -64,6 +70,9 @@ fn run_capture_loop_blocking(
     tracing::info!("connected to EIS implementation (receiver mode)");
 
     let mut modifiers: u32 = 0;
+    let mut abs_x: f64 = screen_width / 2.0;
+    let mut abs_y: f64 = screen_height / 2.0;
+    let mut was_outside = false;
 
     while let Some(ev_result) = iter.next() {
         let event = match ev_result {
@@ -93,15 +102,21 @@ fn run_capture_loop_blocking(
                 device.device.device().start_emulating(0, 0);
             }
             EiEvent::PointerMotion(motion) => {
+                abs_x = (abs_x + motion.dx as f64).clamp(-1.0, screen_width + 1.0);
+                abs_y = (abs_y + motion.dy as f64).clamp(-1.0, screen_height + 1.0);
+                check_edge(&tx, &mut was_outside, abs_x, abs_y, screen_width, screen_height);
                 let _ = tx.blocking_send(InputEvent::MouseMove(
                     motion.dx as f64,
                     motion.dy as f64,
                 ));
             }
             EiEvent::PointerMotionAbsolute(motion) => {
+                abs_x = motion.dx_absolute as f64;
+                abs_y = motion.dy_absolute as f64;
+                check_edge(&tx, &mut was_outside, abs_x, abs_y, screen_width, screen_height);
                 let _ = tx.blocking_send(InputEvent::MouseMove(
-                    motion.dx_absolute as f64,
-                    motion.dy_absolute as f64,
+                    motion.dx_relative as f64,
+                    motion.dy_relative as f64,
                 ));
             }
             EiEvent::Button(btn) => {
@@ -137,4 +152,31 @@ fn run_capture_loop_blocking(
 
     tracing::info!("EIS event loop ended");
     Ok(())
+}
+
+fn check_edge(
+    tx: &mpsc::Sender<InputEvent>,
+    was_outside: &mut bool,
+    abs_x: f64,
+    abs_y: f64,
+    screen_w: f64,
+    screen_h: f64,
+) {
+    let outside = abs_x <= 0.0 || abs_x >= screen_w || abs_y <= 0.0 || abs_y >= screen_h;
+
+    if outside && !*was_outside {
+        let dir = if abs_x <= 0.0 {
+            Direction::Left
+        } else if abs_x >= screen_w {
+            Direction::Right
+        } else if abs_y <= 0.0 {
+            Direction::Top
+        } else {
+            Direction::Bottom
+        };
+        let _ = tx.blocking_send(InputEvent::EdgeReached(dir, abs_x, abs_y));
+    } else if !outside && *was_outside {
+        let _ = tx.blocking_send(InputEvent::EdgeLeft);
+    }
+    *was_outside = outside;
 }

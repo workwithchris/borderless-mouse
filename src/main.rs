@@ -99,7 +99,12 @@ async fn run_server(bind_addr: &str, port: u16) -> anyhow::Result<()> {
         run_server_impl(bind_addr, port).await
     }
 
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "windows")]
+    {
+        run_server_win(bind_addr, port).await
+    }
+
+    #[cfg(not(any(target_os = "linux", target_os = "windows")))]
     {
         run_server_lite(bind_addr, port).await
     }
@@ -153,19 +158,27 @@ async fn run_server_impl(bind_addr: &str, port: u16) -> anyhow::Result<()> {
         }
 
         let screens = screens.clone();
+        let self_name = hostname_();
         tokio::spawn(async move {
-            if let Err(e) = handle_server_client(&mut conn, &screens).await {
+            if let Err(e) = handle_server_client(&mut conn, &screens, self_name).await {
                 tracing::error!("client handler error: {e}");
             }
         });
     }
 }
 
-#[cfg(not(target_os = "linux"))]
-async fn run_server_lite(bind_addr: &str, port: u16) -> anyhow::Result<()> {
+#[cfg(target_os = "windows")]
+async fn run_server_win(bind_addr: &str, port: u16) -> anyhow::Result<()> {
     let addr = format!("{bind_addr}:{port}");
     let listener = bind(&addr).await?;
-    tracing::info!("server listening on {addr} (lite mode — no input capture)");
+    tracing::info!("server listening on {addr}");
+
+    let config = load_config(&config_path()).ok();
+    let screens = config
+        .as_ref()
+        .and_then(|c| c.server.as_ref())
+        .map(|s| s.screens.clone())
+        .unwrap_or_default();
 
     loop {
         let (stream, peer) = listener.accept().await?;
@@ -201,37 +214,42 @@ async fn run_server_lite(bind_addr: &str, port: u16) -> anyhow::Result<()> {
             }
         }
 
+        let screens = screens.clone();
+        let self_name = hostname_();
         tokio::spawn(async move {
-            if let Err(e) = handle_client_events(&mut conn).await {
+            if let Err(e) = handle_server_client_win(&mut conn, &screens, self_name).await {
                 tracing::error!("client handler error: {e}");
             }
         });
     }
 }
 
-#[cfg(target_os = "linux")]
-async fn handle_server_client(
+#[cfg(target_os = "windows")]
+async fn handle_server_client_win(
     conn: &mut Connection,
-    screens: &[bm_core::config::ScreenEdge],
+    screens: &[bm_core::config::ScreenPosition],
+    self_hostname: String,
 ) -> anyhow::Result<()> {
-    let mut capture = bm_input_linux::InputCapture::new().await?;
+    let mut capture = bm_input_windows::InputCapture::new().await?;
     let mut clipboard = ClipboardSync::new(Duration::from_millis(500));
 
-    tracing::info!("entering server event loop");
+    tracing::info!("entering server event loop (Windows)");
 
     loop {
         tokio::select! {
             local_event = capture.next_event() => {
                 match local_event {
-                    Some(InputEvent::EdgeReached(dir)) => {
-                        tracing::info!("cursor reached edge: {dir:?}");
-                        let target = find_target(screens, dir);
+                    Some(InputEvent::EdgeReached(dir, cursor_x, cursor_y)) => {
+                        tracing::info!("cursor reached edge: {dir:?} at ({cursor_x}, {cursor_y})");
+                        capture.set_forwarding(true);
+                        let target = find_target(screens, &self_hostname, dir, cursor_x, cursor_y);
                         if let Some(target_name) = target {
                             tracing::info!("forwarding to: {target_name}");
                             conn.write(&Event::CursorEnter).await?;
                         }
                     }
                     Some(InputEvent::EdgeLeft) => {
+                        capture.set_forwarding(false);
                         conn.write(&Event::CursorLeave).await?;
                     }
                     Some(InputEvent::MouseMove(x, y)) => {
@@ -306,7 +324,155 @@ async fn handle_server_client(
     }
 }
 
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+async fn run_server_lite(bind_addr: &str, port: u16) -> anyhow::Result<()> {
+    let addr = format!("{bind_addr}:{port}");
+    let listener = bind(&addr).await?;
+    tracing::info!("server listening on {addr} (lite mode — no input capture)");
+
+    loop {
+        let (stream, peer) = listener.accept().await?;
+        tracing::info!("connection from {peer}");
+
+        let mut conn = Connection::from_stream(stream)?;
+
+        let event = conn.read().await?.unwrap_or(Event::Disconnect {
+            reason: "connection closed".into(),
+        });
+
+        match event {
+            Event::Ping(id) => {
+                conn.write(&Event::Pong(id)).await?;
+                continue;
+            }
+            Event::Hello { version, hostname, .. } => {
+                tracing::info!("client hello: {hostname} v{version}");
+                conn.write(&Event::HelloAck {
+                    version: PROTOCOL_VERSION,
+                    hostname: hostname_(),
+                    display_size: (0, 0),
+                })
+                .await?;
+            }
+            other => {
+                tracing::warn!("unexpected first message: {other:?}");
+                conn.write(&Event::Disconnect {
+                    reason: "expected Hello".into(),
+                })
+                .await?;
+                continue;
+            }
+        }
+
+        tokio::spawn(async move {
+            if let Err(e) = handle_client_events(&mut conn).await {
+                tracing::error!("client handler error: {e}");
+            }
+        });
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn handle_server_client(
+    conn: &mut Connection,
+    screens: &[bm_core::config::ScreenPosition],
+    self_hostname: String,
+) -> anyhow::Result<()> {
+    let mut capture = bm_input_linux::InputCapture::new().await?;
+    let mut clipboard = ClipboardSync::new(Duration::from_millis(500));
+
+    tracing::info!("entering server event loop");
+
+    loop {
+        tokio::select! {
+            local_event = capture.next_event() => {
+                match local_event {
+                    Some(InputEvent::EdgeReached(dir, cursor_x, cursor_y)) => {
+                        tracing::info!("cursor reached edge: {dir:?} at ({cursor_x}, {cursor_y})");
+                        capture.set_forwarding(true);
+                        let target = find_target(screens, &self_hostname, dir, cursor_x, cursor_y);
+                        if let Some(target_name) = target {
+                            tracing::info!("forwarding to: {target_name}");
+                            conn.write(&Event::CursorEnter).await?;
+                        }
+                    }
+                    Some(InputEvent::EdgeLeft) => {
+                        capture.set_forwarding(false);
+                        conn.write(&Event::CursorLeave).await?;
+                    }
+                    Some(InputEvent::MouseMove(x, y)) => {
+                        if capture.is_forwarding() {
+                            conn.write(&Event::MouseMove { x, y }).await?;
+                        }
+                    }
+                    Some(InputEvent::MouseButton(btn, pressed)) => {
+                        if capture.is_forwarding() {
+                            conn.write(&Event::MouseButton {
+                                button: MouseButton::from(btn),
+                                pressed,
+                            }).await?;
+                        }
+                    }
+                    Some(InputEvent::MouseScroll(dx, dy)) => {
+                        if capture.is_forwarding() {
+                            conn.write(&Event::MouseScroll { dx, dy }).await?;
+                        }
+                    }
+                    Some(InputEvent::KeyEvent(keycode, pressed, modifiers)) => {
+                        if capture.is_forwarding() {
+                            conn.write(&Event::KeyEvent { keycode, pressed, modifiers }).await?;
+                        }
+                    }
+                    None => {
+                        tokio::time::sleep(Duration::from_millis(5)).await;
+                    }
+                }
+            }
+
+            remote = conn.read() => {
+                match remote {
+                    Ok(Some(Event::MouseMove { .. })) => {
+                        if !capture.is_forwarding() {
+                            capture.set_forwarding(true);
+                        }
+                    }
+                    Ok(Some(Event::CursorLeave)) => {
+                        capture.set_forwarding(false);
+                    }
+                    Ok(Some(Event::Disconnect { reason })) => {
+                        tracing::info!("client disconnected: {reason}");
+                        return Ok(());
+                    }
+                    Ok(Some(Event::Ping(id))) => {
+                        conn.write(&Event::Pong(id)).await?;
+                    }
+                    Ok(None) => {
+                        tracing::info!("client connection closed");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        tracing::error!("connection error: {e}");
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+
+            _ = tokio::time::sleep(Duration::from_millis(300)) => {
+                if let Some(change) = clipboard.poll().await {
+                    match change {
+                        ClipboardChange::Local(content) => {
+                            conn.write(&Event::ClipboardChanged { content }).await?;
+                        }
+                        ClipboardChange::Remote(_) => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 async fn handle_client_events(conn: &mut Connection) -> anyhow::Result<()> {
     let mut clipboard = ClipboardSync::new(Duration::from_millis(500));
 
@@ -378,6 +544,9 @@ async fn run_client(connect_addr: &str, port: u16) -> anyhow::Result<()> {
         }
     }
 
+    #[cfg(target_os = "windows")]
+    let mut emulation = bm_input_windows::InputEmulation::new().await?;
+    #[cfg(not(target_os = "windows"))]
     let mut emulation = bm_input_macos::InputEmulation::new().await?;
     let mut clipboard = ClipboardSync::new(Duration::from_millis(500));
 
@@ -449,19 +618,48 @@ fn hostname_() -> String {
         .unwrap_or_else(|_| "unknown".into())
 }
 
-fn find_target(
-    screens: &[bm_core::config::ScreenEdge],
+fn find_target<'a>(
+    screens: &'a [bm_core::config::ScreenPosition],
+    self_hostname: &str,
     direction: Direction,
-) -> Option<&str> {
+    cursor_x: f64,
+    cursor_y: f64,
+) -> Option<&'a str> {
+    let self_s = screens.iter().find(|s| s.name == self_hostname)?;
+
+    let gx = self_s.x + cursor_x as i32;
+    let gy = self_s.y + cursor_y as i32;
+
     for screen in screens {
-        let target = match direction {
-            Direction::Left => screen.left.as_deref(),
-            Direction::Right => screen.right.as_deref(),
-            Direction::Top => screen.top.as_deref(),
-            Direction::Bottom => screen.bottom.as_deref(),
+        if screen.name == self_hostname {
+            continue;
+        }
+
+        let adjacent = match direction {
+            Direction::Left => {
+                screen.x + screen.width as i32 == self_s.x
+                    && gy >= screen.y
+                    && gy <= screen.y + screen.height as i32
+            }
+            Direction::Right => {
+                screen.x == self_s.x + self_s.width as i32
+                    && gy >= screen.y
+                    && gy <= screen.y + screen.height as i32
+            }
+            Direction::Top => {
+                screen.y + screen.height as i32 == self_s.y
+                    && gx >= screen.x
+                    && gx <= screen.x + screen.width as i32
+            }
+            Direction::Bottom => {
+                screen.y == self_s.y + self_s.height as i32
+                    && gx >= screen.x
+                    && gx <= screen.x + screen.width as i32
+            }
         };
-        if target.is_some() {
-            return target;
+
+        if adjacent {
+            return Some(&screen.name);
         }
     }
     None

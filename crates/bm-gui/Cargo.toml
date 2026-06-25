@@ -7,6 +7,7 @@ edition = "2021"
 bm-core = { path = "../bm-core" }
 bm-input-linux = { path = "../bm-input-linux" }
 bm-input-macos = { path = "../bm-input-macos" }
+bm-input-windows = { path = "../bm-input-windows" }
 bm-clipboard = { path = "../bm-clipboard" }
 
 eframe = "0.31"

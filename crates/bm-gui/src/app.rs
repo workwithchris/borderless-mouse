@@ -1,7 +1,9 @@
 use std::sync::Arc;
 
+use bm_core::config::ScreenPosition;
 use bm_core::network::{apply_config_via_gui, detect_interfaces, generate_commands, NetworkConfig};
 use eframe::egui;
+use egui::Color32;
 
 use crate::log_capture::{LogCollector, LogEntry};
 use crate::runtime::{BackgroundEvent, BackgroundTask};
@@ -25,6 +27,11 @@ pub struct BorderlessApp {
     port: String,
     connect_addr: String,
     secret: String,
+
+    // Screen layout
+    screen_positions: Vec<ScreenPosition>,
+    selected_screen: Option<usize>,
+    new_screen_name: String,
 
     // Network setup
     net_ip: String,
@@ -62,6 +69,15 @@ impl Default for BorderlessApp {
             port: "24800".into(),
             connect_addr: "192.168.1.100".into(),
             secret: String::new(),
+            screen_positions: vec![ScreenPosition {
+                name: hostname(),
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            }],
+            selected_screen: Some(0),
+            new_screen_name: String::new(),
             net_ip: "192.168.2.1".into(),
             net_mask: "255.255.255.0".into(),
             net_detected_ifaces: String::new(),
@@ -280,6 +296,14 @@ impl eframe::App for BorderlessApp {
                                 });
                         }
                     }
+                });
+
+            // Screen layout section
+            ui.separator();
+            egui::CollapsingHeader::new("Screen Layout (Deskflow-style)")
+                .default_open(true)
+                .show(ui, |ui| {
+                    self.ui_screen_layout(ui);
                 });
 
             // Network setup section
@@ -517,4 +541,137 @@ impl BorderlessApp {
         self.is_running = false;
         self.status = "stopped".into();
     }
+
+    fn ui_screen_layout(&mut self, ui: &mut egui::Ui) {
+        ui.label("Arrange screens by position. Cursor exits one screen edge and enters the adjacent screen.");
+
+        // --- Visual canvas ---
+        if !self.screen_positions.is_empty() {
+            let (min_x, min_y, max_x, max_y) = self.screen_positions.iter().fold(
+                (i32::MAX, i32::MAX, i32::MIN, i32::MIN),
+                |(mx, my, max_x, max_y), s| {
+                    (
+                        mx.min(s.x),
+                        my.min(s.y),
+                        max_x.max(s.x + s.width as i32),
+                        max_y.max(s.y + s.height as i32),
+                    )
+                },
+            );
+            let grid_w = (max_x - min_x).max(100) as f32;
+            let grid_h = (max_y - min_y).max(100) as f32;
+            let scale = (ui.available_width() / grid_w).min(200.0 / grid_h).min(2.0);
+
+            let (resp, painter) = ui.allocate_painter(
+                egui::vec2(grid_w * scale + 4.0, grid_h * scale + 4.0),
+                egui::Sense::click(),
+            );
+            let origin = resp.rect.min + egui::vec2(2.0, 2.0);
+
+            for (i, screen) in self.screen_positions.iter().enumerate() {
+                let rx = origin.x + (screen.x - min_x) as f32 * scale;
+                let ry = origin.y + (screen.y - min_y) as f32 * scale;
+                let rw = screen.width as f32 * scale;
+                let rh = screen.height as f32 * scale;
+                let rect = egui::Rect::from_min_size(egui::pos2(rx, ry), egui::vec2(rw, rh));
+
+                let is_selected = self.selected_screen == Some(i);
+                let colors = SCREEN_COLORS[i % SCREEN_COLORS.len()];
+                let fill = if is_selected { colors.highlight } else { colors.fill };
+                painter.rect_filled(rect, 4.0, fill);
+                painter.rect_stroke(rect, 4.0, egui::Stroke::new(2.0, colors.stroke), egui::StrokeKind::Outside);
+
+                painter.text(
+                    egui::pos2(rect.center().x, rect.center().y),
+                    egui::Align2::CENTER_CENTER,
+                    &screen.name,
+                    egui::FontId::proportional(14.0),
+                    Color32::WHITE,
+                );
+
+                if resp.clicked() && rect.contains(resp.interact_pointer_pos().unwrap_or(egui::Pos2::ZERO)) {
+                    self.selected_screen = Some(i);
+                }
+            }
+        }
+
+        // --- Edit fields ---
+        ui.separator();
+        if let Some(idx) = self.selected_screen {
+            if idx < self.screen_positions.len() {
+                let screen = &mut self.screen_positions[idx];
+                ui.horizontal(|ui| {
+                    ui.label("Name:");
+                    ui.text_edit_singleline(&mut screen.name);
+                });
+                ui.horizontal(|ui| {
+                    ui.label("X:");
+                    let mut x = screen.x;
+                    if ui.add(egui::DragValue::new(&mut x)).changed() {
+                        screen.x = x;
+                    }
+                    ui.label("Y:");
+                    let mut y = screen.y;
+                    if ui.add(egui::DragValue::new(&mut y)).changed() {
+                        screen.y = y;
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("W:");
+                    let mut w = screen.width;
+                    if ui.add(egui::DragValue::new(&mut w).range(1..=7680)).changed() {
+                        screen.width = w;
+                    }
+                    ui.label("H:");
+                    let mut h = screen.height;
+                    if ui.add(egui::DragValue::new(&mut h).range(1..=4320)).changed() {
+                        screen.height = h;
+                    }
+                });
+                if ui.button("Remove screen").clicked() {
+                    self.screen_positions.remove(idx);
+                    self.selected_screen = self.screen_positions.len().checked_sub(1);
+                }
+            }
+        }
+
+        // --- Add screen ---
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.label("New screen:");
+            ui.text_edit_singleline(&mut self.new_screen_name);
+            if ui.button("Add").clicked() && !self.new_screen_name.is_empty() {
+                let offset = self.screen_positions.len() as i32 * 200;
+                self.screen_positions.push(ScreenPosition {
+                    name: self.new_screen_name.clone(),
+                    x: offset,
+                    y: 0,
+                    width: 1920,
+                    height: 1080,
+                });
+                self.selected_screen = Some(self.screen_positions.len() - 1);
+                self.new_screen_name.clear();
+            }
+        });
+    }
 }
+
+fn hostname() -> String {
+    std::env::var("HOSTNAME")
+        .or_else(|_| std::env::var("HOST"))
+        .unwrap_or_else(|_| "unknown".into())
+}
+
+#[derive(Clone, Copy)]
+struct ScreenColors {
+    fill: Color32,
+    highlight: Color32,
+    stroke: Color32,
+}
+
+const SCREEN_COLORS: &[ScreenColors] = &[
+    ScreenColors { fill: Color32::from_rgb(30, 80, 160), highlight: Color32::from_rgb(60, 140, 220), stroke: Color32::from_rgb(100, 180, 255) },
+    ScreenColors { fill: Color32::from_rgb(160, 60, 30), highlight: Color32::from_rgb(220, 100, 60), stroke: Color32::from_rgb(255, 140, 100) },
+    ScreenColors { fill: Color32::from_rgb(30, 130, 60), highlight: Color32::from_rgb(60, 200, 100), stroke: Color32::from_rgb(100, 255, 140) },
+    ScreenColors { fill: Color32::from_rgb(130, 30, 110), highlight: Color32::from_rgb(200, 60, 180), stroke: Color32::from_rgb(255, 100, 220) },
+];

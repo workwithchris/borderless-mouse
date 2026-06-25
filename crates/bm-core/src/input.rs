@@ -19,6 +19,6 @@ pub enum InputEvent {
     MouseButton(u8, bool),
     MouseScroll(f64, f64),
     KeyEvent(u32, bool, u32),
-    EdgeReached(Direction),
+    EdgeReached(Direction, f64, f64), // direction + cursor_x + cursor_y
     EdgeLeft,
 }

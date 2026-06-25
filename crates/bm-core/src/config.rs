@@ -3,11 +3,12 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ScreenEdge {
-    pub left: Option<String>,
-    pub right: Option<String>,
-    pub top: Option<String>,
-    pub bottom: Option<String>,
+pub struct ScreenPosition {
+    pub name: String,
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -15,7 +16,7 @@ pub struct ServerConfig {
     pub bind_addr: String,
     pub port: u16,
     pub secret: Option<String>,
-    pub screens: Vec<ScreenEdge>,
+    pub screens: Vec<ScreenPosition>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -120,11 +121,12 @@ mod tests {
                 bind_addr: "192.168.1.1".into(),
                 port: 9999,
                 secret: Some("s3cr3t".into()),
-                screens: vec![ScreenEdge {
-                    left: Some("mac".into()),
-                    right: None,
-                    top: None,
-                    bottom: Some("ipad".into()),
+                screens: vec![ScreenPosition {
+                    name: "mac".into(),
+                    x: 1920,
+                    y: 0,
+                    width: 1440,
+                    height: 900,
                 }],
             }),
             client: Some(ClientConfig {
@@ -143,12 +145,12 @@ mod tests {
             Some("s3cr3t")
         );
         assert_eq!(
-            loaded.server.as_ref().unwrap().screens[0].left.as_deref(),
-            Some("mac")
+            loaded.server.as_ref().unwrap().screens[0].name,
+            "mac"
         );
         assert_eq!(
-            loaded.server.as_ref().unwrap().screens[0].bottom.as_deref(),
-            Some("ipad")
+            loaded.server.as_ref().unwrap().screens[0].x,
+            1920
         );
         assert_eq!(loaded.client.as_ref().unwrap().connect_addr, "10.0.0.1");
         std::fs::remove_file(&path).ok();
@@ -187,24 +189,26 @@ mod tests {
     }
 
     #[test]
-    fn multiple_screen_edges() {
+    fn multiple_screen_positions() {
         let config = AppConfig {
             server: Some(ServerConfig {
                 bind_addr: "0.0.0.0".into(),
                 port: 24800,
                 secret: None,
                 screens: vec![
-                    ScreenEdge {
-                        left: Some("mac-left".into()),
-                        right: None,
-                        top: None,
-                        bottom: None,
+                    ScreenPosition {
+                        name: "linux".into(),
+                        x: 0,
+                        y: 0,
+                        width: 1920,
+                        height: 1080,
                     },
-                    ScreenEdge {
-                        left: None,
-                        right: Some("mac-right".into()),
-                        top: None,
-                        bottom: None,
+                    ScreenPosition {
+                        name: "mac".into(),
+                        x: 1920,
+                        y: 0,
+                        width: 1440,
+                        height: 900,
                     },
                 ],
             }),
@@ -216,8 +220,10 @@ mod tests {
         let loaded = load_config(&path).unwrap();
         let screens = loaded.server.unwrap().screens;
         assert_eq!(screens.len(), 2);
-        assert_eq!(screens[0].left.as_deref(), Some("mac-left"));
-        assert_eq!(screens[1].right.as_deref(), Some("mac-right"));
+        assert_eq!(screens[0].name, "linux");
+        assert_eq!(screens[0].x, 0);
+        assert_eq!(screens[1].name, "mac");
+        assert_eq!(screens[1].x, 1920);
         std::fs::remove_file(&path).ok();
     }
 

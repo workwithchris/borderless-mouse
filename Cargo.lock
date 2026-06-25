@@ -605,6 +605,7 @@ dependencies = [
  "bm-core",
  "bm-input-linux",
  "bm-input-macos",
+ "bm-input-windows",
  "directories",
  "eframe",
  "egui",
@@ -641,6 +642,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "bm-input-windows"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bm-core",
+ "tokio",
+ "tracing",
+ "windows",
+]
+
+[[package]]
 name = "borderless-mouse"
 version = "1.0.2"
 dependencies = [
@@ -650,6 +662,7 @@ dependencies = [
  "bm-gui",
  "bm-input-linux",
  "bm-input-macos",
+ "bm-input-windows",
  "clap",
  "directories",
  "eframe",

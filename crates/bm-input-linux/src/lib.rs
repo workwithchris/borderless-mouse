@@ -16,14 +16,19 @@ pub struct InputCapture {
 impl InputCapture {
     #[cfg(feature = "wayland")]
     pub async fn new() -> anyhow::Result<Self> {
+        Self::new_with_size(1920.0, 1080.0).await
+    }
+
+    #[cfg(feature = "wayland")]
+    pub async fn new_with_size(screen_width: f64, screen_height: f64) -> anyhow::Result<Self> {
         let (tx, rx) = mpsc::channel(256);
 
-        let wayland = crate::wayland::WaylandCapture::spawn(tx).await?;
+        let wayland = crate::wayland::WaylandCapture::spawn(tx, screen_width, screen_height).await?;
 
         Ok(Self {
             rx,
-            screen_width: 1920.0,
-            screen_height: 1080.0,
+            screen_width,
+            screen_height,
             forwarding: false,
             wayland_handle: Some(wayland.handle),
         })
@@ -31,11 +36,16 @@ impl InputCapture {
 
     #[cfg(not(feature = "wayland"))]
     pub async fn new() -> anyhow::Result<Self> {
+        Self::new_with_size(1920.0, 1080.0).await
+    }
+
+    #[cfg(not(feature = "wayland"))]
+    pub async fn new_with_size(screen_width: f64, screen_height: f64) -> anyhow::Result<Self> {
         let (_tx, rx) = mpsc::channel(256);
         Ok(Self {
             rx,
-            screen_width: 1920.0,
-            screen_height: 1080.0,
+            screen_width,
+            screen_height,
             forwarding: false,
             wayland_handle: None,
         })
