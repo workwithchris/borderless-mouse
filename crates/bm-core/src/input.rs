@@ -8,6 +8,11 @@ pub enum Direction {
     Bottom,
 }
 
+pub const MOD_SHIFT: u32 = 1 << 0;
+pub const MOD_CONTROL: u32 = 1 << 1;
+pub const MOD_ALT: u32 = 1 << 2;
+pub const MOD_SUPER: u32 = 1 << 3;
+
 #[derive(Debug, Clone)]
 pub enum InputEvent {
     MouseMove(f64, f64),

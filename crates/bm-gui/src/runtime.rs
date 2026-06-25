@@ -41,6 +41,7 @@ impl BackgroundTask {
             let listener = match tokio::net::TcpListener::bind(&addr).await {
                 Ok(l) => {
                     let _ = events.send(BackgroundEvent::Log("info".into(), format!("listening on {addr}"))).await;
+                    let _ = events.send(BackgroundEvent::Status("listening".into())).await;
                     l
                 }
                 Err(e) => {

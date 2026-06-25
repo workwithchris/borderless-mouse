@@ -1,9 +1,13 @@
 use std::time::Duration;
 
 use bm_clipboard::{ClipboardChange, ClipboardSync};
+#[allow(unused_imports)]
 use bm_core::config::{config_path, load_config, save_config, AppConfig};
+#[allow(unused_imports)]
 use bm_core::input::{Direction, InputEvent};
+#[allow(unused_imports)]
 use bm_core::protocol::{Event, MouseButton, PROTOCOL_VERSION, DEFAULT_PORT};
+#[allow(unused_imports)]
 use bm_core::transport::{bind, Connection};
 use clap::{Parser, Subcommand};
 
@@ -89,10 +93,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 }
 
-// Keep the existing server/client headless implementations below
-// (unchanged from before)
-
 async fn run_server(bind_addr: &str, port: u16) -> anyhow::Result<()> {
+    #[cfg(target_os = "linux")]
+    {
+        run_server_impl(bind_addr, port).await
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        run_server_lite(bind_addr, port).await
+    }
+}
+
+#[cfg(target_os = "linux")]
+async fn run_server_impl(bind_addr: &str, port: u16) -> anyhow::Result<()> {
     let addr = format!("{bind_addr}:{port}");
     let listener = bind(&addr).await?;
     tracing::info!("server listening on {addr}");
@@ -147,6 +161,55 @@ async fn run_server(bind_addr: &str, port: u16) -> anyhow::Result<()> {
     }
 }
 
+#[cfg(not(target_os = "linux"))]
+async fn run_server_lite(bind_addr: &str, port: u16) -> anyhow::Result<()> {
+    let addr = format!("{bind_addr}:{port}");
+    let listener = bind(&addr).await?;
+    tracing::info!("server listening on {addr} (lite mode — no input capture)");
+
+    loop {
+        let (stream, peer) = listener.accept().await?;
+        tracing::info!("connection from {peer}");
+
+        let mut conn = Connection::from_stream(stream)?;
+
+        let event = conn.read().await?.unwrap_or(Event::Disconnect {
+            reason: "connection closed".into(),
+        });
+
+        match event {
+            Event::Ping(id) => {
+                conn.write(&Event::Pong(id)).await?;
+                continue;
+            }
+            Event::Hello { version, hostname, .. } => {
+                tracing::info!("client hello: {hostname} v{version}");
+                conn.write(&Event::HelloAck {
+                    version: PROTOCOL_VERSION,
+                    hostname: hostname_(),
+                    display_size: (0, 0),
+                })
+                .await?;
+            }
+            other => {
+                tracing::warn!("unexpected first message: {other:?}");
+                conn.write(&Event::Disconnect {
+                    reason: "expected Hello".into(),
+                })
+                .await?;
+                continue;
+            }
+        }
+
+        tokio::spawn(async move {
+            if let Err(e) = handle_client_events(&mut conn).await {
+                tracing::error!("client handler error: {e}");
+            }
+        });
+    }
+}
+
+#[cfg(target_os = "linux")]
 async fn handle_server_client(
     conn: &mut Connection,
     screens: &[bm_core::config::ScreenEdge],
@@ -210,6 +273,49 @@ async fn handle_server_client(
                     Ok(Some(Event::CursorLeave)) => {
                         capture.set_forwarding(false);
                     }
+                    Ok(Some(Event::Disconnect { reason })) => {
+                        tracing::info!("client disconnected: {reason}");
+                        return Ok(());
+                    }
+                    Ok(Some(Event::Ping(id))) => {
+                        conn.write(&Event::Pong(id)).await?;
+                    }
+                    Ok(None) => {
+                        tracing::info!("client connection closed");
+                        return Ok(());
+                    }
+                    Err(e) => {
+                        tracing::error!("connection error: {e}");
+                        return Ok(());
+                    }
+                    _ => {}
+                }
+            }
+
+            _ = tokio::time::sleep(Duration::from_millis(300)) => {
+                if let Some(change) = clipboard.poll().await {
+                    match change {
+                        ClipboardChange::Local(content) => {
+                            conn.write(&Event::ClipboardChanged { content }).await?;
+                        }
+                        ClipboardChange::Remote(_) => {}
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+async fn handle_client_events(conn: &mut Connection) -> anyhow::Result<()> {
+    let mut clipboard = ClipboardSync::new(Duration::from_millis(500));
+
+    tracing::info!("entering server event loop (lite — clipboard + relay only)");
+
+    loop {
+        tokio::select! {
+            remote = conn.read() => {
+                match remote {
                     Ok(Some(Event::Disconnect { reason })) => {
                         tracing::info!("client disconnected: {reason}");
                         return Ok(());

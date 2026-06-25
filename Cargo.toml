@@ -16,10 +16,9 @@ description = "Software KVM — share mouse, keyboard and clipboard across compu
 
 [dependencies]
 bm-core = { path = "crates/bm-core" }
-bm-input-linux = { path = "crates/bm-input-linux" }
-bm-input-macos = { path = "crates/bm-input-macos" }
 bm-clipboard = { path = "crates/bm-clipboard" }
 bm-gui = { path = "crates/bm-gui" }
+bm-input-macos = { path = "crates/bm-input-macos" }
 
 egui = "0.31"
 eframe = "0.31"
@@ -31,3 +30,6 @@ anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 toml = "0.8"
 directories = "6"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+bm-input-linux = { path = "crates/bm-input-linux", features = ["wayland"] }

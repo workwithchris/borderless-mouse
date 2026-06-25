@@ -10,11 +10,11 @@ anyhow = "1"
 tracing = "0.1"
 
 # Wayland capture via reis + portal (pure Rust, no system libs needed)
-reis = { version = "0.8", optional = true, default-features = false, features = ["tokio"] }
+reis = { version = "0.7", optional = true, default-features = false, features = ["tokio"] }
 ashpd = { version = "0.13", optional = true, features = ["tokio", "remote_desktop", "screencast"] }
 futures-util = { version = "0.3", optional = true }
 libc = "0.2"
 
 [features]
-default = ["wayland"]
+default = []
 wayland = ["reis", "ashpd", "futures-util"]

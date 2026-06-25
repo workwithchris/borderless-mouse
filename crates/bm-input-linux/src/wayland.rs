@@ -8,7 +8,7 @@ use reis::ei::Context;
 use reis::event::{DeviceCapability, EiEvent};
 use tokio::sync::mpsc;
 
-use bm_core::InputEvent;
+use bm_core::input::{InputEvent, MOD_ALT, MOD_CONTROL, MOD_SHIFT, MOD_SUPER};
 
 pub struct WaylandCapture {
     pub handle: tokio::task::JoinHandle<anyhow::Result<()>>,
@@ -63,6 +63,8 @@ fn run_capture_loop_blocking(
 
     tracing::info!("connected to EIS implementation (receiver mode)");
 
+    let mut modifiers: u32 = 0;
+
     while let Some(ev_result) = iter.next() {
         let event = match ev_result {
             Ok(event) => event,
@@ -113,7 +115,21 @@ fn run_capture_loop_blocking(
             }
             EiEvent::KeyboardKey(kb) => {
                 let pressed = matches!(kb.state, KeyState::Press);
-                let _ = tx.blocking_send(InputEvent::KeyEvent(kb.key, pressed, 0));
+                let mod_flag = match kb.key {
+                    42 | 54 => MOD_SHIFT,
+                    29 | 97 => MOD_CONTROL,
+                    56 | 100 => MOD_ALT,
+                    125 | 126 => MOD_SUPER,
+                    _ => 0,
+                };
+                if mod_flag != 0 {
+                    if pressed {
+                        modifiers |= mod_flag;
+                    } else {
+                        modifiers &= !mod_flag;
+                    }
+                }
+                let _ = tx.blocking_send(InputEvent::KeyEvent(kb.key, pressed, modifiers));
             }
             _ => {}
         }
